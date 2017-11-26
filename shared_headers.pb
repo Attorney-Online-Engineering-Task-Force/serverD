@@ -69,6 +69,7 @@ Structure Channel
   pw.s
   hidden.b
   players.w
+  hideplayers.b
   good.w
   evil.w
   maxhp.w
@@ -123,6 +124,7 @@ Structure Client
 EndStructure
 
 Structure ChatMessage
+  deskmod.s
   message.s
   char.s
   emote.s
@@ -178,6 +180,6 @@ Enumeration
   #MOVE
 EndEnumeration
 ; IDE Options = PureBasic 5.31 (Windows - x86)
-; CursorPosition = 47
-; FirstLine = 21
+; CursorPosition = 71
+; FirstLine = 54
 ; EnableXP

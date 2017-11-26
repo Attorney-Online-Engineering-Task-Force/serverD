@@ -117,7 +117,8 @@ EndProcedure
 
 Procedure.s GetAreaName(*nclient.Client)
   Define name$
-  If *nclient\area>=0 And *nclient\area<=AreaNumber
+  Debug *nclient\area
+  If *nclient\area>=0 And *nclient\area<=ChannelCount
     name$=Channels(*nclient\area)\name
   ElseIf *nclient\area=-3
     name$="RAM"
@@ -420,6 +421,38 @@ Procedure RemoveDisconnect(ClientID)
   UnlockMutex(ListMutex)  
 EndProcedure
 
+Procedure GETrequest(requestedFile$,ClientID)
+  Debug "rfile"
+  Debug RequestedFile$
+  If RequestedFile$ = "" Or RequestedFile$ = "/"
+    RequestedFile$ = "index.html"
+  EndIf
+  
+  If ReadFile(0,"cbase/"+RequestedFile$)
+    
+    FileLength = Lof(0)
+    ContentType$ = MIME(RequestedFile$)
+    RFileDate=GetFileDate("cbase/"+RequestedFile$,#PB_Date_Modified)
+    RHeader$="HTTP/1.0 200 OK"+#CRLF$+"Last-Modified: "+DayInText(RFileDate)+", "+Day(RFileDate)+" "+MonthInText(RFileDate)+" "+FormatDate("%yyyy %hh:%ii:%ss",RFileDate)+" GMT"+#CRLF$+"Content-Type: "+ContentType$+#CRLF$+"Content-Length: "+Str(FileLength)+#CRLF$+"Cache-Control: max-age=2628000, public"+#CRLF$+#CRLF$
+    *FileBuffer   = AllocateMemory(FileLength+Len(RHeader$)+20)
+    HLength=PokeS(*FileBuffer,RHeader$,#PB_String_NoZero)  
+    *BufferOffset = *FileBuffer+HLength
+    WriteLog(ip$+" requested file "+RequestedFile$,Server)
+    ReadData(0,*BufferOffset,FileLength)
+    Debug "headerlength"
+    Debug HLength
+    CloseFile(0)
+    Debug PeekS(*FileBuffer,HLength+FileLength)
+    SendNetworkData(ClientID,*FileBuffer,HLength+FileLength)
+    FreeMemory(*FileBuffer)
+  Else
+    RHeader$="HTTP/1.0 404 NOT FOUND"+#CRLF$+#CRLF$
+    SendNetworkString(ClientID,RHeader$)
+  EndIf
+  Debug "not funny"                    
+  
+EndProcedure
+
 Procedure SendString(ClientID,message$)
   Select Clients()\type
     Case #WEBSOCKET
@@ -427,7 +460,7 @@ Procedure SendString(ClientID,message$)
         Websocket_SendTextFrame(ClientID,message$)
       CompilerEndIf
     Case #AOTWO
-      sresult=SendNetworkString(ClientID,message$,#PB_UTF8)
+      sresult=SendNetworkString(ClientID,message$)
     Default
       sresult=SendNetworkString(ClientID,message$)
   EndSelect
@@ -490,6 +523,7 @@ Procedure SendChatMessage(*ntmes.ChatMessage,*seUser.Client)
     
     Select *ntmes\position
       Case "def"
+      Case "hld"
         vpos=1;left
       Case "pro"
         vpos=2;right
@@ -507,31 +541,26 @@ Procedure SendChatMessage(*ntmes.ChatMessage,*seUser.Client)
       If Clients()\area=*seUser\area
         Select Clients()\type
             CompilerIf #WEB
-            Case #WEBSOCKET          
+            Case #WEBSOCKET  
+              message$="MS#chat#"+*ntmes\preemote+"#"+*ntmes\char+"#"+*ntmes\emote+"#"+*ntmes\message+"#"+*ntmes\position+"#"+*ntmes\sfx+"#"
+              message$=message$+Str(*ntmes\emotemod)+"#"+Str(*seUser\CID)+"#"+Str(*ntmes\animdelay)+"#"+Str(*ntmes\objmod)+"#"+Str(*ntmes\evidence)+"#"+Str(*ntmes\flip)+"#"+Str(*ntmes\realization)+"#"+Str(*ntmes\color)+"#%%"
+              
               Websocket_SendTextFrame(Clients()\ClientID,message$)
             CompilerEndIf
-            ;         Case #AOTWO
-            ;           message$="MS#chat#"+*ntmes\preemote+"#"+GetCharacterName(*seUser)+"#"+*ntmes\emote+"#"+*ntmes\message+"#"+*ntmes\position+"#"+*ntmes\sfx+"#"
-            ;           message$+Str(*ntmes\emotemod)+"#"+Str(*ntmes\objmod)+"#"+Str(*ntmes\realization)+"#"+Str(*ntmes\color)+"#"+Str(*ntmes\evidence)+"#"+Str(*seUser\CID)+"#%"
-            ;           
-            ;           sresult=SendNetworkString(Clients()\ClientID,message$)
-            ;           If sresult=-1
-            ;             WriteLog("CLIENT DIED",Clients())
-            ;             RemoveDisconnect(Clients()\ClientID)
-            ;           EndIf
           Case #VNO
-            message$="MS#"+*ntmes\char+"#"+*ntmes\emote+"#"+*ntmes\message+"#"+*ntmes\showname+"#"+*ntmes\emotemod+"#"+Str(*seUser\CID)+"#"+*ntmes\background+"#"+Str(vpos)+"#"+Str(*ntmes\color)+"##%"
-            sresult=SendNetworkString(Clients()\ClientID,message$)
+            message$="MS#"+*ntmes\char+"#"+*ntmes\emote+"#"+*ntmes\message+"#"+*ntmes\showname+"#"+*ntmes\color+"#"+Str(*seUser\CID+1)+"#"+*ntmes\background+"#"+Str(vpos)+"#"+Str(*ntmes\flip)+"#"+*ntmes\sfx+"#%"
+            sresult=SendString(Clients()\ClientID,message$)
+            Debug message$
             If sresult=-1
               WriteLog("CLIENT DIED",Clients())
               RemoveDisconnect(Clients()\ClientID)
             EndIf
           Case #AOTWO
             ;MS#chat#<pre-emote>#<char>#<emote>#<mes>#<pos>#<sfx>#<zoom>#<cid>#<animdelay>#<objection-state>#<evi>#<cid>#<bling>#<color>#%%
-            message$="MS#chat#"+*ntmes\preemote+"#"+*ntmes\char+"#"+*ntmes\emote+"#"+*ntmes\message+"#"+*ntmes\position+"#"+*ntmes\sfx+"#"
+            message$="MS#"+*ntmes\deskmod+"#"+*ntmes\preemote+"#"+*ntmes\char+"#"+*ntmes\emote+"#"+*ntmes\message+"#"+*ntmes\position+"#"+*ntmes\sfx+"#"
             message$=message$+Str(*ntmes\emotemod)+"#"+Str(*seUser\CID)+"#"+Str(*ntmes\animdelay)+"#"+Str(*ntmes\objmod)+"#"+Str(*ntmes\evidence)+"#"+Str(*ntmes\flip)+"#"+Str(*ntmes\realization)+"#"+Str(*ntmes\color)+"#%%"
             
-            sresult=SendNetworkString(Clients()\ClientID,message$)
+            sresult=SendString(Clients()\ClientID,message$)
             If sresult=-1
               WriteLog("CLIENT DIED",Clients())
               RemoveDisconnect(Clients()\ClientID)
@@ -539,9 +568,9 @@ Procedure SendChatMessage(*ntmes.ChatMessage,*seUser.Client)
           Default
             ;MS#chat#<pre-emote>#<char>#<emote>#<mes>#<pos>#<sfx>#<zoom>#<cid>#<animdelay>#<objection-state>#<evi>#<cid>#<bling>#<color>#%%
             message$="MS#chat#"+*ntmes\preemote+"#"+*ntmes\char+"#"+*ntmes\emote+"#"+*ntmes\message+"#"+*ntmes\position+"#"+*ntmes\sfx+"#"
-            message$=message$+Str(*ntmes\emotemod)+"#"+Str(oldCID)+"#"+Str(*ntmes\animdelay)+"#"+Str(*ntmes\objmod)+"#"+Str(*ntmes\evidence)+"#"+Str(oldCID)+"#"+Str(*ntmes\realization)+"#"+Str(*ntmes\color)+"#%%"
+            message$=message$+Str(*ntmes\emotemod)+"#"+Str(oldCID)+"#"+Str(*ntmes\animdelay)+"#"+Str(*ntmes\objmod)+"#"+Str(*ntmes\evidence)+"#"+Str(oldCID)+"#"+Str(*ntmes\realization)+"#"+Str(*ntmes\color%5)+"#%%"
             
-            sresult=SendNetworkString(Clients()\ClientID,message$)
+            sresult=SendString(Clients()\ClientID,message$)
             If sresult=-1
               WriteLog("CLIENT DIED",Clients())
               RemoveDisconnect(Clients()\ClientID)
@@ -575,7 +604,7 @@ Procedure TrackWait(a)
           EndIf
         Else
           If Channels(k)\trackwait<cw
-            cw=(Channels(k)\trackstart+Channels(k)\trackwait)-ElapsedMilliseconds()
+            ;cw=(Channels(k)\trackstart+Channels(k)\trackwait)-ElapsedMilliseconds()
           EndIf
         EndIf
       EndIf
@@ -584,7 +613,7 @@ Procedure TrackWait(a)
   Until LoopMusic=0
 EndProcedure
 ; IDE Options = PureBasic 5.31 (Windows - x86)
-; CursorPosition = 23
-; FirstLine = 18
-; Folding = ----
+; CursorPosition = 435
+; FirstLine = 417
+; Folding = ------
 ; EnableXP
